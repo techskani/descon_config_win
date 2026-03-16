@@ -1,4 +1,4 @@
-// File: C:\Users\zoom01\Desktop\20260210\DESCON-Config-Tool-Windows-Portable\app\detailSetting\[deviceName]\page.tsx
+// File: C:\Users\zoom01\descon_config_win\app\detailSetting\[deviceName]\page.tsx
 import * as entry from '../../../../../app/detailSetting/[deviceName]/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

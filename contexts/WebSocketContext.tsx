@@ -1005,7 +1005,7 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
   // sendMessage関数を実装
   const sendMessage = async (message: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
         console.error("WebSocket接続が確立されていません");
         reject(new Error("WebSocket connection not established"));
         return;
@@ -1013,7 +1013,7 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
 
       try {
         console.log("📤 WebSocketメッセージ送信:", message);
-        ws.send(message);
+        socket.send(message);
         resolve();
       } catch (error) {
         console.error("❌ WebSocketメッセージ送信エラー:", error);

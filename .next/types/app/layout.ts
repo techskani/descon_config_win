@@ -1,4 +1,4 @@
-// File: C:\Users\zoom01\Desktop\20260210\DESCON-Config-Tool-Windows-Portable\app\layout.tsx
+// File: C:\Users\zoom01\descon_config_win\app\layout.tsx
 import * as entry from '../../../app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
