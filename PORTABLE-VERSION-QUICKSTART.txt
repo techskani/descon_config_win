@@ -1,0 +1,141 @@
+========================================
+  DESCON Config Tool - Portable Version
+  Quick Start Guide
+========================================
+
+OPTION 1: AUTOMATIC SETUP (Recommended)
+========================================
+
+1. Right-click "setup-portable.ps1"
+2. Select "Run with PowerShell"
+3. Wait for download and setup (5-10 minutes)
+4. Run "DESCON-Universal.bat"
+
+Done! The application will run without installing anything.
+
+
+OPTION 2: MANUAL SETUP
+========================================
+
+Step 1: Create folder structure
+--------------------------------
+Create these folders:
+  portable/node/
+  portable/python/
+
+Step 2: Download Node.js
+-------------------------
+1. Go to: https://nodejs.org/dist/v20.11.0/
+2. Download: node-v20.11.0-win-x64.zip
+3. Extract all files to: portable/node/
+
+Step 3: Download Python
+------------------------
+1. Go to: https://www.python.org/downloads/windows/
+2. Download: python-3.11.8-embed-amd64.zip
+3. Extract all files to: portable/python/
+
+Step 4: Configure Python
+-------------------------
+1. Open: portable/python/python311._pth
+2. Add this line at the end:
+   import site
+3. Save and close
+
+Step 5: Install pip
+--------------------
+Open Command Prompt and run:
+  cd portable\python
+  curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+  python.exe get-pip.py
+
+Step 6: Test
+------------
+Run: DESCON-Universal.bat
+
+You should see:
+  "Found portable Node.js and Python - Using bundled versions"
+
+
+DISTRIBUTION
+========================================
+
+To share with other PCs:
+
+1. Copy the entire folder to USB drive or network
+2. Make sure "portable" folder is included
+3. Run "DESCON-Universal.bat" on target PC
+4. No installation required!
+
+
+TROUBLESHOOTING
+========================================
+
+Error: "Portable Node.js not found"
+-----------------------------------
+- Check: portable/node/node.exe exists
+- Verify: File is not corrupted
+
+Error: "Portable Python not found"
+----------------------------------
+- Check: portable/python/python.exe exists
+- Verify: File is not corrupted
+
+Error: "Module not found: pip"
+------------------------------
+- Run: portable\python\python.exe -m ensurepip
+- Or follow Step 5 again
+
+Error: "Failed to create virtual environment"
+---------------------------------------------
+- Use embedded Python (see manual setup)
+- Or pre-create venv (see README-Portable-Setup.md)
+
+
+FILE SIZE INFORMATION
+========================================
+
+Expected sizes:
+  portable/node/      ~50 MB
+  portable/python/    ~15 MB
+  Python venv/        ~50 MB
+  Application files/  ~200 MB
+  
+  Total: ~315 MB
+
+Tip: Compress with 7-Zip to reduce size by 50%
+
+
+VERIFICATION CHECKLIST
+========================================
+
+Before distributing, check:
+  [✓] portable/node/node.exe runs
+  [✓] portable/node/npm.cmd exists
+  [✓] portable/python/python.exe runs
+  [✓] DESCON-Universal.bat starts without errors
+  [✓] No "ERROR" messages during startup
+  [✓] Application window opens successfully
+
+
+SUPPORT
+========================================
+
+For detailed instructions:
+  See: README-Portable-Setup.md
+
+For automatic setup:
+  Run: setup-portable.ps1
+
+For issues:
+  Check all files are in correct locations
+  Verify file permissions
+  Test on clean PC without Node.js/Python
+
+
+========================================
+Version: 1.0.0
+Last Updated: 2025-01-21
+========================================
+
+
