@@ -245,7 +245,7 @@ class DeviceSettingsManager:
         return device_current_data.get(device_name, None)
 
 # ----------------------------------------------------------------------
-# enhance_device_response
+# enhance_device_response：使ってない - kotani
 # ----------------------------------------------------------------------
 def enhance_device_response(raw_response: str, device_name: str) -> str:
     """
@@ -311,7 +311,7 @@ def enhance_device_response(raw_response: str, device_name: str) -> str:
     return '\n'.join(final_lines)
 
 # ----------------------------------------------------------------------
-# send_setvaluerequest_command
+# send_setvaluerequest_command：使ってない - kotani
 # ----------------------------------------------------------------------
 async def send_setvaluerequest_command(device, setvalue_number):
     """リモート装置にSetValueRequestコマンドを送信して設定値を読み出す"""
@@ -358,6 +358,200 @@ async def send_setvaluerequest_command(device, setvalue_number):
         return None
 
 # ----------------------------------------------------------------------
+# send_setvalue2remote_common：send_setvalue_to_remoteから共通部分を抽出 - kotani
+# ----------------------------------------------------------------------
+async def send_setval2remote_common(s, host, port, device_name, commands, setting_key_map, max_channels, current_settings):
+    """リモート装置にSetValueコマンドを送信して設定を更新（共通部分の抽出）"""
+    successful_commands = []
+    failed_commands = []
+
+    # ------------------------------------------------------------
+    # まず現在のリモート装置の設定を取得（受信データベース方式）
+    # ------------------------------------------------------------
+    print(f"  📖 [{device_name}] リモート装置から現在の設定を取得中...")
+    current_remote_settings = {}
+    
+    for setvalue_num in commands:
+        try:
+            # SetValueRequestで現在の値を取得
+            request_cmd = f"SetValueRequest,{setvalue_num}\r\n"
+            s.sendall(request_cmd.encode('utf-8'))
+            
+            # レスポンスを受信（改行ごとに処理）
+            s.settimeout(5.0)
+            buffer = b''
+            received_target = False
+            
+            # ------------------------------------------------------------
+            # 受信ループ
+            # ------------------------------------------------------------
+            while not received_target:
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                buffer += chunk
+                
+                # 改行ごとに処理
+                while b'\n' in buffer:
+                    line_bytes, buffer = buffer.split(b'\n', 1)
+                    line = line_bytes.decode('utf-8', errors='ignore').strip()
+                    
+                    if not line:
+                        continue
+                    
+                    # 対象のSetValue行を検出
+                    if line.startswith(f'{setvalue_num},'):
+                        # "202,1=59.0,2=61.0,..." 形式
+                        parts = line.split(',')
+                        # parts[0] = setvalue_num, parts[1:]が値
+                        current_remote_settings[setvalue_num] = parts[1:]
+                        received_target = True
+                        break
+            
+            await asyncio.sleep(0.2)
+        except Exception as e:
+            print(f"  ⚠️ [{device_name}] SetValue,{setvalue_num} 現在値取得失敗: {e}")
+            return successful_commands, failed_commands         # kotani
+    
+    print(f"  ✅ [{device_name}] 現在の設定取得完了（{len(current_remote_settings)}ブロック）")
+    
+    # ------------------------------------------------------------
+    # 取得した現在値をベースに、変更箇所だけ上書きして送信
+    # ------------------------------------------------------------
+    for setvalue_num in commands:
+        setting_key = setting_key_map.get(setvalue_num)
+        if setting_key in current_settings:
+            setting_data = current_settings[setting_key]
+            
+            # 現在のリモート装置の値を取得（key=value形式）
+            if setvalue_num in current_remote_settings:
+                current_values = current_remote_settings[setvalue_num]
+                # key=value形式から値だけ抽出
+                values = []
+                for kv in current_values:
+                    if '=' in kv:
+                        values.append(kv.split('=')[1])
+                    else:
+                        values.append(kv)
+                
+                # デバッグ: 現在値の状態をログ出力
+                if setvalue_num == commands[2]:
+                    print(f"  🔍 [{device_name}] SetValue,{command[2]} デバッグ:")
+                    print(f"    current_values 件数: {len(current_values)}")
+                    print(f"    current_values 最初の3件: {current_values[:3]}")
+                    print(f"    values 件数: {len(values)}")
+                    print(f"    values 最初の3件: {values[:3]}")
+                
+                # フロントエンドから送信された変更箇所を上書き
+                for ch in range(1, min(len(values) + 1, max_channels + 1)):
+                    new_value = setting_data.get(ch, setting_data.get(str(ch)))
+                    if new_value is not None:
+                        values[ch - 1] = str(new_value)
+                
+                # key=value形式で再構築
+                pairs = [f'{i+1}={v}' for i, v in enumerate(values)]
+                
+                # デバッグ: 構築後の状態をログ出力
+                if setvalue_num == commands[2]:
+                    print(f"    pairs 件数: {len(pairs)}")
+                    print(f"    pairs 最初の3件: {pairs[:3]}")
+                
+                command = f"SetValue,{setvalue_num},{','.join(pairs)}"
+            else:
+                # 現在値が取得できなかった場合は従来通り
+                values = []
+                for ch in range(1, 45):
+                    value = setting_data.get(ch, setting_data.get(str(ch), 0))
+                    values.append(str(value))
+                pairs = [f'{i+1}={v}' for i, v in enumerate(values)]
+                command = f"SetValue,{setvalue_num},{','.join(pairs)}"
+            
+            command_with_terminator = command + "\r\n"
+            command_bytes = command_with_terminator.encode('utf-8')
+            
+            try:
+                # バッファをクリア（前のコマンドの残りデータを破棄）
+                s.settimeout(0.1)
+                # ------------------------------------------------------------
+                # 受信ループ
+                # ------------------------------------------------------------
+                try:
+                    while True:
+                        discard = s.recv(4096)
+                        if not discard:
+                            break
+                except socket.timeout:
+                    pass
+                
+                # 最初の3値をログに出力
+                sample_pairs = pairs[:3]
+                print(f"  📤 [{device_name}] 送信: SetValue,{setvalue_num} (データ長:{len(pairs)}, 最初の3値:{','.join(sample_pairs)})")
+                s.sendall(command_bytes)
+                
+                # 送信後、少し待機してからレスポンスを受信
+                await asyncio.sleep(0.3)
+                
+                # 応答を受信（複数行の可能性があるため、OKまたはNGを探す）
+                s.settimeout(2.0)
+                buffer = b''
+                found_ok = False
+                found_ng = False
+                
+                try:
+                    # ------------------------------------------------------------
+                    # 受信ループ
+                    # ------------------------------------------------------------
+                    # 最大2秒間データを受信
+                    start_time = asyncio.get_event_loop().time()
+                    while (asyncio.get_event_loop().time() - start_time) < 2.0:
+                        try:
+                            s.settimeout(0.5)
+                            chunk = s.recv(4096)
+                            if chunk:
+                                buffer += chunk
+                                response_str = buffer.decode('utf-8', errors='ignore')
+                                
+                                # OKまたはNGを探す
+                                if 'OK' in response_str.upper():
+                                    found_ok = True
+                                    break
+                                if 'NG' in response_str.upper():
+                                    found_ng = True
+                                    break
+                        except socket.timeout:
+                            # タイムアウトしたら次のループへ
+                            continue
+                        except:
+                            break
+                except:
+                    pass
+                
+                response = buffer.decode('utf-8', errors='ignore').strip()
+                # 最初の200文字だけログに出力
+                response_preview = response[:200] + ('...' if len(response) > 200 else '')
+                print(f"  📥 [{device_name}] 受信: {response_preview}")
+                
+                if found_ok or (not found_ng and len(response) == 0):
+                    successful_commands.append(f"SetValue,{setvalue_num}")
+                    print(f"  ✅ [{device_name}] SetValue,{setvalue_num} 設定成功")
+                elif found_ng:
+                    failed_commands.append(f"SetValue,{setvalue_num}")
+                    print(f"  ❌ [{device_name}] SetValue,{setvalue_num} 設定失敗: NG")
+                else:
+                    # OKもNGもない場合は成功と判定（リモート装置が異常なレスポンスを返す場合）
+                    successful_commands.append(f"SetValue,{setvalue_num}")
+                    print(f"  ✅ [{device_name}] SetValue,{setvalue_num} 設定成功（応答不明、正常と判定）")
+                
+                await asyncio.sleep(0.5)
+                
+            except Exception as cmd_error:
+                failed_commands.append(f"SetValue,{setvalue_num}")
+                print(f"  ❌ [{device_name}] SetValue,{setvalue_num} 送信エラー: {cmd_error}")
+                return successful_commands, failed_commands         # kotani
+
+    return successful_commands, failed_commands                     # kotani
+
+# ----------------------------------------------------------------------
 # send_setvalue_to_remote
 # ----------------------------------------------------------------------
 async def send_setvalue_to_remote(device, temp_settings, track_settings, curr_settings, leak_settings=None, brkr_settings=None, device_model=None):
@@ -367,18 +561,29 @@ async def send_setvalue_to_remote(device, temp_settings, track_settings, curr_se
     device_name = device["name"]
     
     # モデルごとのチャンネル数を決定
-    if device_model == 'T28C16R8I1':
-        max_temp_channels = 48  # 16回路 x 3相
-        max_track_curr_channels = 16  # 16回路
-        max_brkr_channels = 8  # 8回路
-    elif device_model == 'T64C30B30I1':
-        max_temp_channels = 60  # 30回路 x 2相
-        max_track_curr_channels = 30  # 30回路
-        max_brkr_channels = 30  # 30回路
-    else:  # T24C10B10A
-        max_temp_channels = 44  # 20回路 x 2相 + 4（主幹など）
-        max_track_curr_channels = 20  # 20回路
-        max_brkr_channels = 20  # 20回路
+    if device_model == 'T28C16R8I1':                # DESCON動力盤
+        max_temp_channels = 48                      # 16回路 x 3相
+        max_track_curr_channels = 16                # 16回路
+        max_brkr_channels = 8                       # 8回路
+        max_leak_curr_channels = 1                  # kotani
+
+    elif device_model == 'T64C30B30I1':             # DESCON電灯盤 / ホーム分電盤30回路
+        max_temp_channels = 60                      # 30回路 x 2相
+        max_track_curr_channels = 30                # 30回路
+        max_brkr_channels = 30                      # 30回路
+        max_leak_curr_channels = 1                  # kotani
+
+    elif device_model == 'T44C20B20':               # ホーム分電盤20回路 / ホーム分電盤40回路 - kotani
+        max_temp_channels = 44                      # 20回路 x 2相 + 4（主幹など）
+        max_track_curr_channels = 20                # 20回路
+        max_brkr_channels = 20                      # 20回路
+        max_leak_curr_channels = 1                  # kotani
+
+    else:                                           # T24C10B10A - kotani
+        max_temp_channels = 24                      # 10回路 x 2相 + 4（主幹など）
+        max_track_curr_channels = 10                # 10回路
+        max_brkr_channels = 10                      # 10回路
+        max_leak_curr_channels = 1                  # kotani
     
     successful_commands = []
     failed_commands = []
@@ -386,11 +591,11 @@ async def send_setvalue_to_remote(device, temp_settings, track_settings, curr_se
     try:
         print(f"🔧 [{device_name}] リモート装置への設定送信開始")
         
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(20.0)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(20.0)
             try:
                 print(f"  🔌 [{device_name}] 接続開始: {host}:{port}")
-                s.connect((host, port))
+                sock.connect((host, port))
                 print(f"  ✅ [{device_name}] 接続成功")
             except Exception as conn_error:
                 print(f"  ❌ [{device_name}] 接続失敗: {conn_error}")
@@ -406,659 +611,79 @@ async def send_setvalue_to_remote(device, temp_settings, track_settings, curr_se
             # SetValue,200-206 (温度設定)を送信
             # ------------------------------------------------------------
             if temp_settings:
-                # ------------------------------------------------------------
-                # まず現在のリモート装置の設定を取得（受信データベース方式）
-                # ------------------------------------------------------------
-                print(f"  📖 [{device_name}] リモート装置から現在の設定を取得中...")
-                current_remote_settings = {}
-                
-                for setvalue_num in [200, 201, 202, 203, 204, 205, 206]:
-                    try:
-                        # SetValueRequestで現在の値を取得
-                        request_cmd = f"SetValueRequest,{setvalue_num}\r\n"
-                        s.sendall(request_cmd.encode('utf-8'))
-                        
-                        # レスポンスを受信（改行ごとに処理）
-                        s.settimeout(5.0)
-                        buffer = b''
-                        received_target = False
-                        
-                        # ------------------------------------------------------------
-                        # 受信ループ
-                        # ------------------------------------------------------------
-                        while not received_target:
-                            chunk = s.recv(4096)
-                            if not chunk:
-                                break
-                            buffer += chunk
-                            
-                            # 改行ごとに処理
-                            while b'\n' in buffer:
-                                line_bytes, buffer = buffer.split(b'\n', 1)
-                                line = line_bytes.decode('utf-8', errors='ignore').strip()
-                                
-                                if not line:
-                                    continue
-                                
-                                # 対象のSetValue行を検出
-                                if line.startswith(f'{setvalue_num},'):
-                                    # "202,1=59.0,2=61.0,..." 形式
-                                    parts = line.split(',')
-                                    # parts[0] = setvalue_num, parts[1:]が値
-                                    current_remote_settings[setvalue_num] = parts[1:]
-                                    received_target = True
-                                    break
-                        
-                        await asyncio.sleep(0.2)
-                    except Exception as e:
-                        print(f"  ⚠️ [{device_name}] SetValue,{setvalue_num} 現在値取得失敗: {e}")
-                
-                print(f"  ✅ [{device_name}] 現在の設定取得完了（{len(current_remote_settings)}ブロック）")
-                
-                # ------------------------------------------------------------
-                # 取得した現在値をベースに、変更箇所だけ上書きして送信
-                # ------------------------------------------------------------
-                for setvalue_num in [200, 201, 202, 203, 204, 205, 206]:
-                    setting_key_map = {
-                        200: 'channel_mapping',
-                        201: 'sensor_enabled',
-                        202: 'warning_temperatures',
-                        203: 'warning_times',
-                        204: 'alarm_temperatures',
-                        205: 'alarm_times',
-                        206: 'immediate_thresholds'
-                    }
-                    
-                    setting_key = setting_key_map.get(setvalue_num)
-                    if setting_key in temp_settings:
-                        setting_data = temp_settings[setting_key]
-                        
-                        # 現在のリモート装置の値を取得（key=value形式）
-                        if setvalue_num in current_remote_settings:
-                            current_values = current_remote_settings[setvalue_num]
-                            # key=value形式から値だけ抽出
-                            values = []
-                            for kv in current_values:
-                                if '=' in kv:
-                                    values.append(kv.split('=')[1])
-                                else:
-                                    values.append(kv)
-                            
-                            # デバッグ: 現在値の状態をログ出力
-                            if setvalue_num == 202:
-                                print(f"  🔍 [{device_name}] SetValue,202 デバッグ:")
-                                print(f"    current_values 件数: {len(current_values)}")
-                                print(f"    current_values 最初の3件: {current_values[:3]}")
-                                print(f"    values 件数: {len(values)}")
-                                print(f"    values 最初の3件: {values[:3]}")
-                            
-                            # フロントエンドから送信された変更箇所を上書き
-                            for ch in range(1, min(len(values) + 1, max_temp_channels + 1)):
-                                new_value = setting_data.get(ch, setting_data.get(str(ch)))
-                                if new_value is not None:
-                                    values[ch - 1] = str(new_value)
-                            
-                            # key=value形式で再構築
-                            pairs = [f'{i+1}={v}' for i, v in enumerate(values)]
-                            
-                            # デバッグ: 構築後の状態をログ出力
-                            if setvalue_num == 202:
-                                print(f"    pairs 件数: {len(pairs)}")
-                                print(f"    pairs 最初の3件: {pairs[:3]}")
-                            
-                            command = f"SetValue,{setvalue_num},{','.join(pairs)}"
-                        else:
-                            # 現在値が取得できなかった場合は従来通り
-                            values = []
-                            for ch in range(1, 45):
-                                value = setting_data.get(ch, setting_data.get(str(ch), 0))
-                                values.append(str(value))
-                            pairs = [f'{i+1}={v}' for i, v in enumerate(values)]
-                            command = f"SetValue,{setvalue_num},{','.join(pairs)}"
-                        
-                        command_with_terminator = command + "\r\n"
-                        command_bytes = command_with_terminator.encode('utf-8')
-                        
-                        try:
-                            # バッファをクリア（前のコマンドの残りデータを破棄）
-                            s.settimeout(0.1)
-                            # ------------------------------------------------------------
-                            # 受信ループ
-                            # ------------------------------------------------------------
-                            try:
-                                while True:
-                                    discard = s.recv(4096)
-                                    if not discard:
-                                        break
-                            except socket.timeout:
-                                pass
-                            
-                            # 最初の3値をログに出力
-                            sample_pairs = pairs[:3]
-                            print(f"  📤 [{device_name}] 送信: SetValue,{setvalue_num} (データ長:{len(pairs)}, 最初の3値:{','.join(sample_pairs)})")
-                            s.sendall(command_bytes)
-                            
-                            # 送信後、少し待機してからレスポンスを受信
-                            await asyncio.sleep(0.3)
-                            
-                            # 応答を受信（複数行の可能性があるため、OKまたはNGを探す）
-                            s.settimeout(2.0)
-                            buffer = b''
-                            found_ok = False
-                            found_ng = False
-                            
-                            try:
-                                # ------------------------------------------------------------
-                                # 受信ループ
-                                # ------------------------------------------------------------
-                                # 最大2秒間データを受信
-                                start_time = asyncio.get_event_loop().time()
-                                while (asyncio.get_event_loop().time() - start_time) < 2.0:
-                                    try:
-                                        s.settimeout(0.5)
-                                        chunk = s.recv(4096)
-                                        if chunk:
-                                            buffer += chunk
-                                            response_str = buffer.decode('utf-8', errors='ignore')
-                                            
-                                            # OKまたはNGを探す
-                                            if 'OK' in response_str.upper():
-                                                found_ok = True
-                                                break
-                                            if 'NG' in response_str.upper():
-                                                found_ng = True
-                                                break
-                                    except socket.timeout:
-                                        # タイムアウトしたら次のループへ
-                                        continue
-                                    except:
-                                        break
-                            except:
-                                pass
-                            
-                            response = buffer.decode('utf-8', errors='ignore').strip()
-                            # 最初の200文字だけログに出力
-                            response_preview = response[:200] + ('...' if len(response) > 200 else '')
-                            print(f"  📥 [{device_name}] 受信: {response_preview}")
-                            
-                            if found_ok or (not found_ng and len(response) == 0):
-                                successful_commands.append(f"SetValue,{setvalue_num}")
-                                print(f"  ✅ [{device_name}] SetValue,{setvalue_num} 設定成功")
-                            elif found_ng:
-                                failed_commands.append(f"SetValue,{setvalue_num}")
-                                print(f"  ❌ [{device_name}] SetValue,{setvalue_num} 設定失敗: NG")
-                            else:
-                                # OKもNGもない場合は成功と判定（リモート装置が異常なレスポンスを返す場合）
-                                successful_commands.append(f"SetValue,{setvalue_num}")
-                                print(f"  ✅ [{device_name}] SetValue,{setvalue_num} 設定成功（応答不明、正常と判定）")
-                            
-                            await asyncio.sleep(0.5)
-                            
-                        except Exception as cmd_error:
-                            failed_commands.append(f"SetValue,{setvalue_num}")
-                            print(f"  ❌ [{device_name}] SetValue,{setvalue_num} 送信エラー: {cmd_error}")
-            
+                commands = [200, 201, 202, 203, 204, 205, 206]
+                setting_key_map = {
+                    200: 'channel_mapping',
+                    201: 'sensor_enabled',
+                    202: 'warning_temperatures',
+                    203: 'warning_times',
+                    204: 'alarm_temperatures',
+                    205: 'alarm_times',
+                    206: 'immediate_thresholds'
+                }
+                oks, ngs = send_setval2remote_common(sock, host, port, device_name, commands, setting_key_map, max_temp_channels, temp_settings)
+                successful_commands += oks
+                failed_commands += ngs
+
             # ------------------------------------------------------------
             # SetValue,210-214 (トラッキング設定)を送信
             # ------------------------------------------------------------
             if track_settings:
-                # ------------------------------------------------------------
-                # まず現在のリモート装置の設定を取得
-                # ------------------------------------------------------------
-                print(f"  📖 [{device_name}] トラッキング設定の現在値を取得中...")
-                current_track_settings = {}
-                
-                for setvalue_num in [210, 211, 212, 213, 214]:
-                    try:
-                        request_cmd = f"SetValueRequest,{setvalue_num}\r\n"
-                        s.sendall(request_cmd.encode('utf-8'))
-                        
-                        s.settimeout(5.0)
-                        buffer = b''
-                        received_target = False
-                        
-                        # ------------------------------------------------------------
-                        # 受信ループ
-                        # ------------------------------------------------------------
-                        while not received_target:
-                            chunk = s.recv(4096)
-                            if not chunk:
-                                break
-                            buffer += chunk
-                            
-                            while b'\n' in buffer:
-                                line_bytes, buffer = buffer.split(b'\n', 1)
-                                line = line_bytes.decode('utf-8', errors='ignore').strip()
-                                
-                                if not line:
-                                    continue
-                                
-                                if line.startswith(f'{setvalue_num},'):
-                                    parts = line.split(',')
-                                    current_track_settings[setvalue_num] = parts[1:]
-                                    received_target = True
-                                    break
-                        
-                        await asyncio.sleep(0.2)
-                    except Exception as e:
-                        print(f"  ⚠️ [{device_name}] SetValue,{setvalue_num} 現在値取得失敗: {e}")
-                
-                print(f"  ✅ [{device_name}] トラッキング設定取得完了（{len(current_track_settings)}ブロック）")
-                
-                # ------------------------------------------------------------
-                # 取得した現在値をベースに変更して送信
-                # ------------------------------------------------------------
-                for setvalue_num in [210, 211, 212, 213, 214]:
-                    setting_key_map = {
-                        210: 'relay',
-                        211: 'warning_current',
-                        212: 'warning_count',
-                        213: 'alarm_current',
-                        214: 'alarm_count'
-                    }
-                    
-                    setting_key = setting_key_map.get(setvalue_num)
-                    if setting_key in track_settings:
-                        setting_data = track_settings[setting_key]
-                        
-                        if setvalue_num in current_track_settings:
-                            current_values = current_track_settings[setvalue_num]
-                            values = []
-                            for kv in current_values:
-                                if '=' in kv:
-                                    values.append(kv.split('=')[1])
-                                else:
-                                    values.append(kv)
-                            
-                            for ch in range(1, min(len(values) + 1, max_track_curr_channels + 1)):
-                                new_value = setting_data.get(ch, setting_data.get(str(ch)))
-                                if new_value is not None:
-                                    values[ch - 1] = str(new_value)
-                            
-                            pairs = [f'{i+1}={v}' for i, v in enumerate(values)]
-                            command = f"SetValue,{setvalue_num},{','.join(pairs)}"
-                        else:
-                            values = []
-                            for ch in range(1, max_track_curr_channels + 1):
-                                value = setting_data.get(ch, setting_data.get(str(ch), 0))
-                                values.append(str(value))
-                            pairs = [f'{i+1}={v}' for i, v in enumerate(values)]
-                            command = f"SetValue,{setvalue_num},{','.join(pairs)}"
-                        
-                        command_with_terminator = command + "\r\n"
-                        command_bytes = command_with_terminator.encode('utf-8')
-                        
-                        try:
-                            print(f"  📤 [{device_name}] 送信: SetValue,{setvalue_num} (データ長:{len(pairs)})")
-                            s.sendall(command_bytes)
-                            
-                            s.settimeout(10.0)
-                            try:
-                                response = s.recv(1024).decode('utf-8', errors='ignore').strip()
-                                print(f"  📥 [{device_name}] 受信: {response}")
-                                
-                                if "OK" in response.upper() or len(response) == 0:
-                                    successful_commands.append(f"SetValue,{setvalue_num}")
-                                    print(f"  ✅ [{device_name}] SetValue,{setvalue_num} 設定成功")
-                                else:
-                                    failed_commands.append(f"SetValue,{setvalue_num}")
-                                    print(f"  ❌ [{device_name}] SetValue,{setvalue_num} 設定失敗: {response}")
-                            except socket.timeout:
-                                successful_commands.append(f"SetValue,{setvalue_num}")
-                                print(f"  ✅ [{device_name}] SetValue,{setvalue_num} 設定完了（応答なし、正常と判定）")
-                            
-                            await asyncio.sleep(0.5)
-                            
-                        except Exception as cmd_error:
-                            failed_commands.append(f"SetValue,{setvalue_num}")
-                            print(f"  ❌ [{device_name}] SetValue,{setvalue_num} 送信エラー: {cmd_error}")
+                commands = [210, 211, 212, 213, 214]
+                setting_key_map = {
+                    210: 'relay',
+                    211: 'warning_current',
+                    212: 'warning_count',
+                    213: 'alarm_current',
+                    214: 'alarm_count'
+                }
+                oks, ngs = send_setval2remote_common(sock, host, port, device_name, commands, setting_key_map, max_track_curr_channels, track_settings)
+                successful_commands += oks
+                failed_commands += ngs
             
             # ------------------------------------------------------------
             # SetValue,220-224 (過電流設定)を送信
             # ------------------------------------------------------------
             if curr_settings:
-                # ------------------------------------------------------------
-                # まず現在のリモート装置の設定を取得
-                # ------------------------------------------------------------
-                print(f"  📖 [{device_name}] 過電流設定の現在値を取得中...")
-                current_curr_settings = {}
-                
-                for setvalue_num in [220, 221, 222, 223, 224]:
-                    try:
-                        request_cmd = f"SetValueRequest,{setvalue_num}\r\n"
-                        s.sendall(request_cmd.encode('utf-8'))
-                        
-                        s.settimeout(5.0)
-                        buffer = b''
-                        received_target = False
-                        
-                        # ------------------------------------------------------------
-                        # 受信ループ
-                        # ------------------------------------------------------------
-                        while not received_target:
-                            chunk = s.recv(4096)
-                            if not chunk:
-                                break
-                            buffer += chunk
-                            
-                            while b'\n' in buffer:
-                                line_bytes, buffer = buffer.split(b'\n', 1)
-                                line = line_bytes.decode('utf-8', errors='ignore').strip()
-                                
-                                if not line:
-                                    continue
-                                
-                                if line.startswith(f'{setvalue_num},'):
-                                    parts = line.split(',')
-                                    current_curr_settings[setvalue_num] = parts[1:]
-                                    received_target = True
-                                    break
-                        
-                        await asyncio.sleep(0.2)
-                    except Exception as e:
-                        print(f"  ⚠️ [{device_name}] SetValue,{setvalue_num} 現在値取得失敗: {e}")
-                
-                print(f"  ✅ [{device_name}] 過電流設定取得完了（{len(current_curr_settings)}ブロック）")
-                
-                # ------------------------------------------------------------
-                # 取得した現在値をベースに変更して送信
-                # ------------------------------------------------------------
-                for setvalue_num in [220, 221, 222, 223, 224]:
-                    setting_key_map = {
-                        220: 'relay',
-                        221: 'warning_current',
-                        222: 'warning_delays',
-                        223: 'alarm_current',
-                        224: 'alarm_delays'
-                    }
-                    
-                    setting_key = setting_key_map.get(setvalue_num)
-                    if setting_key in curr_settings:
-                        setting_data = curr_settings[setting_key]
-                        
-                        if setvalue_num in current_curr_settings:
-                            current_values = current_curr_settings[setvalue_num]
-                            values = []
-                            for kv in current_values:
-                                if '=' in kv:
-                                    values.append(kv.split('=')[1])
-                                else:
-                                    values.append(kv)
-                            
-                            for ch in range(1, min(len(values) + 1, max_track_curr_channels + 1)):
-                                new_value = setting_data.get(ch, setting_data.get(str(ch)))
-                                if new_value is not None:
-                                    values[ch - 1] = str(new_value)
-                            
-                            pairs = [f'{i+1}={v}' for i, v in enumerate(values)]
-                            command = f"SetValue,{setvalue_num},{','.join(pairs)}"
-                        else:
-                            values = []
-                            for ch in range(1, max_track_curr_channels + 1):
-                                value = setting_data.get(ch, setting_data.get(str(ch), 0))
-                                values.append(str(value))
-                            pairs = [f'{i+1}={v}' for i, v in enumerate(values)]
-                            command = f"SetValue,{setvalue_num},{','.join(pairs)}"
-                        
-                        command_with_terminator = command + "\r\n"
-                        command_bytes = command_with_terminator.encode('utf-8')
-                        
-                        try:
-                            print(f"  📤 [{device_name}] 送信: SetValue,{setvalue_num} (データ長:{len(pairs)})")
-                            s.sendall(command_bytes)
-                            
-                            s.settimeout(10.0)
-                            try:
-                                response = s.recv(1024).decode('utf-8', errors='ignore').strip()
-                                print(f"  📥 [{device_name}] 受信: {response}")
-                                
-                                if "OK" in response.upper() or len(response) == 0:
-                                    successful_commands.append(f"SetValue,{setvalue_num}")
-                                    print(f"  ✅ [{device_name}] SetValue,{setvalue_num} 設定成功")
-                                else:
-                                    failed_commands.append(f"SetValue,{setvalue_num}")
-                                    print(f"  ❌ [{device_name}] SetValue,{setvalue_num} 設定失敗: {response}")
-                            except socket.timeout:
-                                successful_commands.append(f"SetValue,{setvalue_num}")
-                                print(f"  ✅ [{device_name}] SetValue,{setvalue_num} 設定完了（応答なし、正常と判定）")
-                            
-                            await asyncio.sleep(0.5)
-                            
-                        except Exception as cmd_error:
-                            failed_commands.append(f"SetValue,{setvalue_num}")
-                            print(f"  ❌ [{device_name}] SetValue,{setvalue_num} 送信エラー: {cmd_error}")
-            
+                commands = [220, 221, 222, 223, 224]
+                setting_key_map = {
+                    220: 'relay',
+                    221: 'warning_current',
+                    222: 'warning_delays',
+                    223: 'alarm_current',
+                    224: 'alarm_delays'
+                }
+                oks, ngs = send_setval2remote_common(sock, host, port, device_name, commands, setting_key_map, max_track_curr_channels, curr_settings)
+                successful_commands += oks
+                failed_commands += ngs
+
             # ------------------------------------------------------------
             # SetValue,230-234 (漏洩電流設定)を送信
             # ------------------------------------------------------------
             if leak_settings:
-                # ------------------------------------------------------------
-                # まず現在のリモート装置の設定を取得
-                # ------------------------------------------------------------
-                print(f"  📖 [{device_name}] 漏洩電流設定の現在値を取得中...")
-                current_leak_settings = {}
-                
-                for setvalue_num in [230, 231, 232, 233, 234]:
-                    try:
-                        request_cmd = f"SetValueRequest,{setvalue_num}\r\n"
-                        s.sendall(request_cmd.encode('utf-8'))
-                        
-                        s.settimeout(5.0)
-                        buffer = b''
-                        received_lines = []
-                        timestamp_received = False
-                        
-                        # ------------------------------------------------------------
-                        # 受信ループ
-                        # ------------------------------------------------------------
-                        # タイムスタンプ行（270,）まで全データを受信
-                        while not timestamp_received:
-                            chunk = s.recv(4096)
-                            if not chunk:
-                                break
-                            buffer += chunk
-                            
-                            while b'\n' in buffer:
-                                line_bytes, buffer = buffer.split(b'\n', 1)
-                                line = line_bytes.decode('utf-8', errors='ignore').strip()
-                                
-                                if not line:
-                                    continue
-                                
-                                received_lines.append(line)
-                                
-                                # タイムスタンプ行が来たら終了
-                                if line.startswith('270,'):
-                                    timestamp_received = True
-                                    break
-                        
-                        # 受信した全行から目的のSetValue行を抽出
-                        for line in received_lines:
-                            if line.startswith(f'{setvalue_num},'):
-                                parts = line.split(',')
-                                current_leak_settings[setvalue_num] = parts[1:]
-                                break
-                        
-                        await asyncio.sleep(0.3)
-                    except Exception as e:
-                        print(f"  ⚠️ [{device_name}] SetValue,{setvalue_num} 現在値取得失敗: {e}")
-                
-                print(f"  ✅ [{device_name}] 漏洩電流設定取得完了（{len(current_leak_settings)}ブロック）")
-                
-                # ------------------------------------------------------------
-                # 取得した現在値をベースに変更して送信
-                # ------------------------------------------------------------
-                for setvalue_num in [230, 231, 232, 233, 234]:
-                    setting_key_map = {
-                        230: 'relay',
-                        231: 'warning_current',
-                        232: 'warning_delays',
-                        233: 'alarm_current',
-                        234: 'alarm_delays'
-                    }
-                    
-                    setting_key = setting_key_map.get(setvalue_num)
-                    if setting_key in leak_settings:
-                        setting_data = leak_settings[setting_key]
-                        
-                        if setvalue_num in current_leak_settings:
-                            current_values = current_leak_settings[setvalue_num]
-                            values = []
-                            for kv in current_values:
-                                if '=' in kv:
-                                    values.append(kv.split('=')[1])
-                                else:
-                                    values.append(kv)
-                            
-                            # 漏洩電流は最大チャンネル数が少ない（通常1-2チャンネル）
-                            for ch in range(1, min(len(values) + 1, max_track_curr_channels + 1)):
-                                new_value = setting_data.get(ch, setting_data.get(str(ch)))
-                                if new_value is not None:
-                                    values[ch - 1] = str(new_value)
-                            
-                            pairs = [f'{i+1}={v}' for i, v in enumerate(values)]
-                            command = f"SetValue,{setvalue_num},{','.join(pairs)}"
-                        else:
-                            values = []
-                            # デフォルトは1チャンネル
-                            max_leak_channels = min(max_track_curr_channels, len(setting_data))
-                            for ch in range(1, max_leak_channels + 1):
-                                value = setting_data.get(ch, setting_data.get(str(ch), 0))
-                                values.append(str(value))
-                            pairs = [f'{i+1}={v}' for i, v in enumerate(values)]
-                            command = f"SetValue,{setvalue_num},{','.join(pairs)}"
-                        
-                        command_with_terminator = command + "\r\n"
-                        command_bytes = command_with_terminator.encode('utf-8')
-                        
-                        try:
-                            print(f"  📤 [{device_name}] 送信: SetValue,{setvalue_num} (データ長:{len(pairs)})")
-                            s.sendall(command_bytes)
-                            
-                            s.settimeout(10.0)
-                            try:
-                                response = s.recv(1024).decode('utf-8', errors='ignore').strip()
-                                print(f"  📥 [{device_name}] 受信: {response}")
-                                
-                                if "OK" in response.upper() or len(response) == 0:
-                                    successful_commands.append(f"SetValue,{setvalue_num}")
-                                    print(f"  ✅ [{device_name}] SetValue,{setvalue_num} 設定成功")
-                                else:
-                                    failed_commands.append(f"SetValue,{setvalue_num}")
-                                    print(f"  ❌ [{device_name}] SetValue,{setvalue_num} 設定失敗: {response}")
-                            except socket.timeout:
-                                successful_commands.append(f"SetValue,{setvalue_num}")
-                                print(f"  ✅ [{device_name}] SetValue,{setvalue_num} 設定完了（応答なし、正常と判定）")
-                            
-                            await asyncio.sleep(0.5)
-                            
-                        except Exception as cmd_error:
-                            failed_commands.append(f"SetValue,{setvalue_num}")
-                            print(f"  ❌ [{device_name}] SetValue,{setvalue_num} 送信エラー: {cmd_error}")
+                commands = [230, 231, 232, 233, 234]
+                setting_key_map = {
+                    230: 'relay',
+                    231: 'warning_current',
+                    232: 'warning_delays',
+                    233: 'alarm_current',
+                    234: 'alarm_delays'
+                }
+                oks, ngs = send_setval2remote_common(sock, host, port, device_name, commands, setting_key_map, max_leak_curr_channels, leak_settings)
+                successful_commands += oks
+                failed_commands += ngs
             
             # ------------------------------------------------------------
             # SetValue,250 (ブレーカー遮断検知設定)を送信
             # ------------------------------------------------------------
             if brkr_settings:
-                print(f"  📖 [{device_name}] ブレーカー設定の現在値を取得中...")
-                current_brkr_settings = {}
-                
-                try:
-                    # ------------------------------------------------------------
-                    # SetValueRequest,250で現在の値を取得
-                    # ------------------------------------------------------------
-                    request_cmd = "SetValueRequest,250\r\n"
-                    s.sendall(request_cmd.encode('utf-8'))
-                    
-                    s.settimeout(5.0)
-                    buffer = b''
-                    received_target = False
-                    
-                    # ------------------------------------------------------------
-                    # 受信ループ
-                    # ------------------------------------------------------------
-                    while not received_target:
-                        chunk = s.recv(4096)
-                        if not chunk:
-                            break
-                        buffer += chunk
-                        
-                        while b'\n' in buffer:
-                            line_bytes, buffer = buffer.split(b'\n', 1)
-                            line = line_bytes.decode('utf-8', errors='ignore').strip()
-                            
-                            if not line:
-                                continue
-                            
-                            if line.startswith('250,'):
-                                parts = line.split(',')
-                                current_brkr_settings[250] = parts[1:]
-                                received_target = True
-                                break
-                    
-                    await asyncio.sleep(0.2)
-                except Exception as e:
-                    print(f"  ⚠️ [{device_name}] SetValue,250 現在値取得失敗: {e}")
-                
-                # ------------------------------------------------------------
-                # 250番設定を送信（ブレーカー遮断検知 ON/OFF）
-                # ------------------------------------------------------------
-                if 'trip_detection' in brkr_settings:
-                    trip_detection_data = brkr_settings['trip_detection']
-                    
-                    if 250 in current_brkr_settings:
-                        current_values = current_brkr_settings[250]
-                        values = []
-                        for kv in current_values:
-                            if '=' in kv:
-                                values.append(kv.split('=')[1])
-                            else:
-                                values.append(kv)
-                        
-                        # フロントエンドから送信された変更箇所を上書き
-                        for ch in range(1, min(len(values) + 1, max_brkr_channels + 1)):
-                            new_value = trip_detection_data.get(ch, trip_detection_data.get(str(ch)))
-                            if new_value is not None:
-                                values[ch - 1] = str(new_value)
-                        
-                        pairs = [f'{i+1}={v}' for i, v in enumerate(values)]
-                        command = f"SetValue,250,{','.join(pairs)}"
-                    else:
-                        # 現在値が取得できなかった場合、フロントエンドの値で構築
-                        values = []
-                        for ch in range(1, max_brkr_channels + 1):
-                            value = trip_detection_data.get(ch, trip_detection_data.get(str(ch), 'ON'))
-                            values.append(str(value))
-                        pairs = [f'{i+1}={v}' for i, v in enumerate(values)]
-                        command = f"SetValue,250,{','.join(pairs)}"
-                    
-                    command_with_terminator = command + "\r\n"
-                    command_bytes = command_with_terminator.encode('utf-8')
-                    
-                    try:
-                        print(f"  📤 [{device_name}] 送信: SetValue,250 (データ長:{len(pairs)})")
-                        s.sendall(command_bytes)
-                        
-                        s.settimeout(10.0)
-                        try:
-                            response = s.recv(1024).decode('utf-8', errors='ignore').strip()
-                            print(f"  📥 [{device_name}] 受信: {response}")
-                            
-                            if "OK" in response.upper() or len(response) == 0:
-                                successful_commands.append("SetValue,250")
-                                print(f"  ✅ [{device_name}] SetValue,250 設定成功")
-                            else:
-                                failed_commands.append("SetValue,250")
-                                print(f"  ❌ [{device_name}] SetValue,250 設定失敗: {response}")
-                        except socket.timeout:
-                            successful_commands.append("SetValue,250")
-                            print(f"  ✅ [{device_name}] SetValue,250 設定完了（応答なし、正常と判定）")
-                        
-                        await asyncio.sleep(0.5)
-                        
-                    except Exception as cmd_error:
-                        failed_commands.append("SetValue,250")
-                        print(f"  ❌ [{device_name}] SetValue,250 送信エラー: {cmd_error}")
+                commands = [250]
+                setting_key_map = {
+                    250: 'trip_detection'
+                }
+                oks, ngs = send_setval2remote_common(sock, host, port, device_name, commands, setting_key_map, max_brkr_channels, brkr_settings)
+                successful_commands += oks
+                failed_commands += ngs
             
             print(f"🎉 [{device_name}] リモート装置への設定送信完了 - 成功: {len(successful_commands)}, 失敗: {len(failed_commands)}")
             
@@ -1080,7 +705,7 @@ async def send_setvalue_to_remote(device, temp_settings, track_settings, curr_se
         }
 
 # ----------------------------------------------------------------------
-# send_setvalue_commands
+# send_setvalue_commands：リモート装置の旧モデル用 - kotani
 # ----------------------------------------------------------------------
 async def send_setvalue_commands(device, temp_settings):
     """DESCON装置にSetValueコマンドを送信して設定を更新（受信データベース方式）"""
