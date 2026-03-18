@@ -358,10 +358,10 @@ async def send_setvaluerequest_command(device, setvalue_number):
         return None
 
 # ----------------------------------------------------------------------
-# send_setvalue2remote_common：send_setvalue_to_remoteから共通部分を抽出 - kotani
+# sndsetval_common：send_setvalue_to_remoteから共通部分を抽出 - kotani
 # ----------------------------------------------------------------------
-async def send_setval2remote_common(s, host, port, device_name, commands, setting_key_map, max_channels, current_settings):
-    """リモート装置にSetValueコマンドを送信して設定を更新（共通部分の抽出）"""
+async def sndsetval_common(sock, device_name, commands, setting_key_map, max_channels, current_settings):
+    """リモート装置にSetValueコマンドを送信して設定を更新（共通部分）"""
     successful_commands = []
     failed_commands = []
 
@@ -375,10 +375,10 @@ async def send_setval2remote_common(s, host, port, device_name, commands, settin
         try:
             # SetValueRequestで現在の値を取得
             request_cmd = f"SetValueRequest,{setvalue_num}\r\n"
-            s.sendall(request_cmd.encode('utf-8'))
+            sock.sendall(request_cmd.encode('utf-8'))
             
             # レスポンスを受信（改行ごとに処理）
-            s.settimeout(5.0)
+            sock.settimeout(5.0)
             buffer = b''
             received_target = False
             
@@ -386,7 +386,7 @@ async def send_setval2remote_common(s, host, port, device_name, commands, settin
             # 受信ループ
             # ------------------------------------------------------------
             while not received_target:
-                chunk = s.recv(4096)
+                chunk = sock.recv(4096)
                 if not chunk:
                     break
                 buffer += chunk
@@ -471,13 +471,13 @@ async def send_setval2remote_common(s, host, port, device_name, commands, settin
             
             try:
                 # バッファをクリア（前のコマンドの残りデータを破棄）
-                s.settimeout(0.1)
+                sock.settimeout(0.1)
                 # ------------------------------------------------------------
                 # 受信ループ
                 # ------------------------------------------------------------
                 try:
                     while True:
-                        discard = s.recv(4096)
+                        discard = sock.recv(4096)
                         if not discard:
                             break
                 except socket.timeout:
@@ -486,13 +486,13 @@ async def send_setval2remote_common(s, host, port, device_name, commands, settin
                 # 最初の3値をログに出力
                 sample_pairs = pairs[:3]
                 print(f"  📤 [{device_name}] 送信: SetValue,{setvalue_num} (データ長:{len(pairs)}, 最初の3値:{','.join(sample_pairs)})")
-                s.sendall(command_bytes)
+                sock.sendall(command_bytes)
                 
                 # 送信後、少し待機してからレスポンスを受信
                 await asyncio.sleep(0.3)
                 
                 # 応答を受信（複数行の可能性があるため、OKまたはNGを探す）
-                s.settimeout(2.0)
+                sock.settimeout(2.0)
                 buffer = b''
                 found_ok = False
                 found_ng = False
@@ -505,8 +505,8 @@ async def send_setval2remote_common(s, host, port, device_name, commands, settin
                     start_time = asyncio.get_event_loop().time()
                     while (asyncio.get_event_loop().time() - start_time) < 2.0:
                         try:
-                            s.settimeout(0.5)
-                            chunk = s.recv(4096)
+                            sock.settimeout(0.5)
+                            chunk = sock.recv(4096)
                             if chunk:
                                 buffer += chunk
                                 response_str = buffer.decode('utf-8', errors='ignore')
@@ -621,7 +621,7 @@ async def send_setvalue_to_remote(device, temp_settings, track_settings, curr_se
                     205: 'alarm_times',
                     206: 'immediate_thresholds'
                 }
-                oks, ngs = send_setval2remote_common(sock, host, port, device_name, commands, setting_key_map, max_temp_channels, temp_settings)
+                oks, ngs = sndsetval_common(sock, device_name, commands, setting_key_map, max_temp_channels, temp_settings)
                 successful_commands += oks
                 failed_commands += ngs
 
@@ -637,7 +637,7 @@ async def send_setvalue_to_remote(device, temp_settings, track_settings, curr_se
                     213: 'alarm_current',
                     214: 'alarm_count'
                 }
-                oks, ngs = send_setval2remote_common(sock, host, port, device_name, commands, setting_key_map, max_track_curr_channels, track_settings)
+                oks, ngs = sndsetval_common(sock, device_name, commands, setting_key_map, max_track_curr_channels, track_settings)
                 successful_commands += oks
                 failed_commands += ngs
             
@@ -653,7 +653,7 @@ async def send_setvalue_to_remote(device, temp_settings, track_settings, curr_se
                     223: 'alarm_current',
                     224: 'alarm_delays'
                 }
-                oks, ngs = send_setval2remote_common(sock, host, port, device_name, commands, setting_key_map, max_track_curr_channels, curr_settings)
+                oks, ngs = sndsetval_common(sock, device_name, commands, setting_key_map, max_track_curr_channels, curr_settings)
                 successful_commands += oks
                 failed_commands += ngs
 
@@ -669,7 +669,7 @@ async def send_setvalue_to_remote(device, temp_settings, track_settings, curr_se
                     233: 'alarm_current',
                     234: 'alarm_delays'
                 }
-                oks, ngs = send_setval2remote_common(sock, host, port, device_name, commands, setting_key_map, max_leak_curr_channels, leak_settings)
+                oks, ngs = sndsetval_common(sock, device_name, commands, setting_key_map, max_leak_curr_channels, leak_settings)
                 successful_commands += oks
                 failed_commands += ngs
             
@@ -681,7 +681,7 @@ async def send_setvalue_to_remote(device, temp_settings, track_settings, curr_se
                 setting_key_map = {
                     250: 'trip_detection'
                 }
-                oks, ngs = send_setval2remote_common(sock, host, port, device_name, commands, setting_key_map, max_brkr_channels, brkr_settings)
+                oks, ngs = sndsetval_common(sock, device_name, commands, setting_key_map, max_brkr_channels, brkr_settings)
                 successful_commands += oks
                 failed_commands += ngs
             
