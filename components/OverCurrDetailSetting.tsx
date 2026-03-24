@@ -68,7 +68,8 @@ export function OverCurrDetailSettings({selectedDeviceName, isEditable, config, 
   // ジュール熱詳細設定からの回路名・電源種別変更イベントをリッスン
   useEffect(() => {
     const handleCircuitNameChange = (event: CustomEvent) => {
-      if (event.detail.deviceName === selectedDeviceName && (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T24R8A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1")) {
+      // T44C20B20を追加 - kotani (2026/03/24)
+      if (event.detail.deviceName === selectedDeviceName && (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T24R8A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T44C20B20")) {
         const { oldCircuitName, newCircuitName, newPower, newBreaker } = event.detail;
         
         // 過電流テーブルの回路名、電源種別、ブレーカーを更新
@@ -88,7 +89,8 @@ export function OverCurrDetailSettings({selectedDeviceName, isEditable, config, 
     };
 
     const handlePowerChange = (event: CustomEvent) => {
-      if (event.detail.deviceName === selectedDeviceName && (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T24R8A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1")) {
+      // T44C20B20を追加 - kotani (2026/03/24)
+      if (event.detail.deviceName === selectedDeviceName && (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T24R8A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T44C20B20")) {
         const { circuitName, newPower } = event.detail;
         
         // 過電流テーブルの電源種別を更新
@@ -218,7 +220,8 @@ export function OverCurrDetailSettings({selectedDeviceName, isEditable, config, 
                   setOriginalOverCurrTableData(tabledetailData);
                   
                   // T24R8A/T28C16R8I1/T64C30B30I1用: windowオブジェクトにデータを保存
-                  if (device.model === "T24R8A" || device.model === "T28C16R8I1" || device.model === "T64C30B30I1") {
+                  // T44C20B20を追加 - kotani (2026/03/24)
+                  if (device.model === "T24R8A" || device.model === "T28C16R8I1" || device.model === "T64C30B30I1" || device.model === "T44C20B20") {
                     (window as any).currTableDataForWrite = tabledetailData;
                   }
               }
@@ -229,7 +232,8 @@ export function OverCurrDetailSettings({selectedDeviceName, isEditable, config, 
     
     // currTableDataが更新されたらwindowにも反映（T24R8A/T28C16R8I1/T64C30B30I1用）
     useEffect(() => {
-      if ((deviceDetail.model === "T24R8A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1") && currTableData.length > 0) {
+      // T44C20B20を追加 - kotani (2026/03/24)
+      if ((deviceDetail.model === "T24R8A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T44C20B20") && currTableData.length > 0) {
         (window as any).currTableDataForWrite = currTableData;
       }
     }, [currTableData, deviceDetail.model]);
@@ -363,7 +367,8 @@ export function OverCurrDetailSettings({selectedDeviceName, isEditable, config, 
     setcurrTableData(updatedTableData);
     
     // T24R8A/T28C16R8I1/T64C30B30I1用: windowオブジェクトにデータを保存
-    if (deviceModel === "T24R8A" || deviceModel === "T28C16R8I1" || deviceModel === "T64C30B30I1") {
+    // T44C20B20を追加 - kotani (2026/03/24)
+    if (deviceModel === "T24R8A" || deviceModel === "T28C16R8I1" || deviceModel === "T64C30B30I1" || deviceModel === "T44C20B20") {
       (window as any).currTableDataForWrite = updatedTableData;
     }
   };
@@ -804,8 +809,8 @@ export function OverCurrDetailSettings({selectedDeviceName, isEditable, config, 
                 <select
                   value={row["circuit-name"]}
                   onChange={(e) => handleCircuitNameChange(e, row)}
-                  disabled={!isEditable || deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T24R8A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1"}
-                  className={`w-full text-center form-select ${isEditable && deviceDetail.model !== "T24C10B10A" && deviceDetail.model !== "T24R8A" && deviceDetail.model !== "T28C16R8I1" && deviceDetail.model !== "T64C30B30I1" ? 'border-2 border-blue-500 bg-blue-100' : ''}`}
+                  disabled={!isEditable || deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T24R8A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T44C20B20"}
+                  className={`w-full text-center form-select ${isEditable && deviceDetail.model !== "T24C10B10A" && deviceDetail.model !== "T24R8A" && deviceDetail.model !== "T28C16R8I1" && deviceDetail.model !== "T64C30B30I1" && deviceDetail.model !== "T44C20B20" ? 'border-2 border-blue-500 bg-blue-100' : ''}`}
                 >
                     {Array.from(new Set(deviceDetail.circuits.map(circuit => circuit.name)))
                       .filter(name => name !== "未使用")

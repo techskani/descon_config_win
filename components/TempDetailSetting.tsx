@@ -236,7 +236,8 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
             // デフォルトの回路値を取得する関数
             const getDefaultCircuitValues = (circuitName: string) => {
               if (circuitName.includes("主幹")) {
-                if (device.model === "T64C30B30I1" || device.model === "T24C10B10A" || device.model === "T24C10B10B") {
+                // T44C20B20を追加 - kotani (2026/03/24)
+                if (device.model === "T64C30B30I1" || device.model === "T24C10B10A" || device.model === "T24C10B10B" || device.model === "T44C20B20") {
                   return {
                     power: "電灯単層200V",
                     wire: "CV",
@@ -329,6 +330,27 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
                 } else {
                     phaseLabel = "";
                 }
+            // ホーム分電盤20/40回路 - kotani (2026/03/24)
+            } else if (device.model === "T44C20B20") {
+                // 40点まで対応、2点ずつで電源種別(power)によって相が変わる
+                if (i < 40) {
+                    const powerType = power || "";
+                    
+                    // 2点ずつのグループ内での位置（0または1）
+                    const groupPosition = i % 2;
+                    
+                    if (powerType.includes("単相100V")) {
+                        // 単相100Vの場合：R, N
+                        phaseLabel = groupPosition === 0 ? "R" : "N";
+                    } else if (powerType.includes("単相200V")) {
+                        // 単相200Vの場合：R, T
+                        phaseLabel = groupPosition === 0 ? "R" : "T";
+                    } else {
+                        phaseLabel = "";
+                    }
+                } else {
+                    phaseLabel = "";
+                }
             } else {
                 // その他のモデルの場合
                 phaseLabel = "";
@@ -378,7 +400,8 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
           originalTempTableDataRef.current = tabledetailData;
           
           // T24C10B10A, T28C16R8I1, T64C30B30I1の場合、windowオブジェクトにも保存（設定データ変更時に使用）
-          if (device.model === "T24C10B10A" || device.model === "T28C16R8I1" || device.model === "T64C30B30I1") {
+          // T44C20B20を追加 - kotani (2026/03/24)
+          if (device.model === "T24C10B10A" || device.model === "T28C16R8I1" || device.model === "T64C30B30I1" || device.model === "T44C20B20") {
             (window as any).tempTableDataForWrite = tabledetailData;
           }
         } else {
@@ -402,7 +425,8 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
     settempTableData(updatedTableData);
     
     // T24C10B10A, T28C16R8I1, T64C30B30I1の場合、windowオブジェクトにも保存（設定データ変更時に使用）
-    if (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1") {
+    // T44C20B20を追加 - kotani (2026/03/24)
+    if (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T44C20B20") {
       (window as any).tempTableDataForWrite = updatedTableData;
     }
     
@@ -420,7 +444,8 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
     
   // モデル別の連動処理（T24C10B10A / T24R8A / T28C16R8I1 / T64C30B30I1）
   // 回路名や電源種別の変更時のみ実行
-  if (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T24R8A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1") {
+  // T44C20B20を追加 - kotani (2026/03/24)
+  if (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T24R8A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T44C20B20") {
       const changedRow = tempTableData[index]; // 変更前のデータ
       const updatedRow = updatedTableData[index]; // 変更後のデータ
       
@@ -605,6 +630,9 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
           return 24;
         case 'T8R0A':
           return 8;
+        // T44C20B20を追加 - kotani (2026/03/24)
+        case 'T44C20B20':
+          return 40;
         default:
           return 20; 
       }
@@ -620,7 +648,8 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
       existingRowR = existingRowsWithSameCircuitList.find(r => r.phase === "R");
       existingRowS = existingRowsWithSameCircuitList.find(r => r.phase === "S");
       existingRowT = existingRowsWithSameCircuitList.find(r => r.phase === "T");
-    } else if ((deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T24C10B10A") && row["sensor-No"] <= maxSensorNo) {
+    // T44C20B20を追加 - kotani (2026/03/24)
+    } else if ((deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T44C20B20") && row["sensor-No"] <= maxSensorNo) {
       // 選択した回路の全相（R,N/T）のデータを取得
       existingRowsWithSameCircuitList = originalTempTableData.filter(r => r["circuit-name"] === newCircuitName);
   
@@ -652,7 +681,8 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
         const groupIndex = Math.floor((row["sensor-No"] - 1) / 3);
         const currentGroupIndex = Math.floor((sensorNo - 1) / 3);
         shouldUpdate = groupIndex === currentGroupIndex;
-      } else if ((deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T24C10B10A") && row["sensor-No"] <= maxSensorNo && sensorNo <= maxSensorNo) {
+      // T44C20B20を追加 - kotani (2026/03/24)
+      } else if ((deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T44C20B20") && row["sensor-No"] <= maxSensorNo && sensorNo <= maxSensorNo) {
         // T64C30B30I1/T24C10B10A: 最大点数以下の場合は2つずつグループ化
         const groupIndex = Math.floor((row["sensor-No"] - 1) / 2);
         const currentGroupIndex = Math.floor((sensorNo - 1) / 2);
@@ -715,10 +745,12 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
           };
         } else if (selectedCircuit) {
           // 相固有のデータを使用する必要があるかどうか判断
+          // T44C20B20を追加 - kotani (2026/03/24)
           const usePhaseSpecificData = (
             (deviceDetail.model === "T28C16R8I1" && row["sensor-No"] <= maxSensorNo) ||
             (deviceDetail.model === "T64C30B30I1" && row["sensor-No"] <= maxSensorNo) ||
             (deviceDetail.model === "T24C10B10A" && row["sensor-No"] <= maxSensorNo) ||
+            (deviceDetail.model === "T44C20B20" && row["sensor-No"] <= maxSensorNo) ||
             (deviceDetail.model === "T24R8A" && row["sensor-No"] <= maxSensorNo)
           );
           
@@ -784,7 +816,8 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
     settempTableData(updatedTableData);
     
     // T24C10B10A、T24R8A、T28C16R8I1、T64C30B30I1モデルで回路名が変更された場合、他のテーブルとconfigを更新
-    if (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T24R8A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1") {
+    // T44C20B20を追加 - kotani (2026/03/24)
+    if (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T24R8A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T44C20B20") {
       const oldCircuitName = row["circuit-name"];
       
       // 変更後の回路情報を取得（updatedTableDataから）
@@ -867,6 +900,7 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
             };
           } else {
             // T24C10B10A
+            // TODO：T44C20B20はどうする？ - kotani (2026/03/24)
             return {
               ...device,
               circuits: device.circuits.map(circuit => 
@@ -1020,7 +1054,8 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
     settempTableData(updatedTableData);
     
     // T24C10B10A, T28C16R8I1, T64C30B30I1の場合、windowオブジェクトも更新
-    if (deviceModel === "T24C10B10A" || deviceModel === "T28C16R8I1" || deviceModel === "T64C30B30I1") {
+    // 44C20B20を追加 - kotani (2026/03/24)
+    if (deviceModel === "T24C10B10A" || deviceModel === "T28C16R8I1" || deviceModel === "T64C30B30I1" || deviceModel === "T44C20B20") {
       (window as any).tempTableDataForWrite = updatedTableData;
     }
     
@@ -1253,6 +1288,59 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
     seteditConfig(updatedConfig);
   };
 
+  // T44C20B20用：temp-namesに基づいてconfig全体を同期（2点グループ）
+  const syncConfigWithTempNamesForT44C20B20 = (backendSettings: any) => {
+    const tempNames = backendSettings.temp_names || [];
+    const trackNames = backendSettings.track_names || [];
+    const currNames = backendSettings.curr_names || [];
+    const circuits = backendSettings.circuits || [];
+    
+    const updatedConfig = config.map(device => {
+      if (device.name === selectedDeviceName) {
+        // circuitsも更新
+        const updatedCircuits = device.circuits.map((circuit, index) => {
+          // 2点グループの最初のtemp-namesを使用（i=0→0, i=1→2, i=2→4...）
+          const tempNameIndex = index * 2;
+          if (tempNameIndex < tempNames.length) {
+            const newName = tempNames[tempNameIndex];
+            const backendCircuit = circuits.find((c: any) => c.name === newName);
+            if (backendCircuit) {
+              return {
+                ...circuit,
+                name: newName,
+                power: backendCircuit.power || circuit.power,
+                breaker: backendCircuit.breaker || circuit.breaker,
+                wire: backendCircuit.wire || circuit.wire
+              };
+            }
+            return {
+              ...circuit,
+              name: newName
+            };
+          }
+          return circuit;
+        });
+        
+        // brkr-namesを更新（circuitsのnameから生成、主幹を除く）
+        const brkrNames = updatedCircuits
+          .filter(c => c.name !== "主幹")
+          .map(c => c.name);
+        
+        return {
+          ...device,
+          "temp-names": tempNames,
+          "track-names": trackNames,
+          "curr-names": currNames,
+          "brkr-names": brkrNames,
+          circuits: updatedCircuits
+        };
+      }
+      return device;
+    });
+    
+    seteditConfig(updatedConfig);
+  };
+
   // バックエンドから設定データを読み出す機能
   const handleReadDeviceData = async () => {
     if (!selectedDeviceName) {
@@ -1374,6 +1462,12 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
               syncConfigWithTempNamesForT64C30B30I1(afterReadSettings);
             }
             
+            // T44C20B20の場合、temp-namesに基づいてconfig全体を同期
+            if (deviceModel === "T44C20B20" && afterReadSettings.temp_names) {
+              console.log('📖 [読み出し] T64C30B30I1 config同期実行');
+              syncConfigWithTempNamesForT44C20B20(afterReadSettings);
+            }
+            
             // config同期後、少し待ってからテーブルを更新（config更新による再レンダリング後）
             setTimeout(() => {
               updateMainTableWithBackendData(afterReadSettings);
@@ -1453,8 +1547,9 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
       });
 
       // T24C10B10A, T28C16R8I1, T64C30B30I1の場合、windowオブジェクトから最新のテーブルデータを取得
+      // T44C20B20を追加 - kotani (2026/03/24)
       let currentTempTableData = tempTableData;
-      if ((currentDevice.model === "T24C10B10A" || currentDevice.model === "T28C16R8I1" || currentDevice.model === "T64C30B30I1") && (window as any).tempTableDataForWrite) {
+      if ((currentDevice.model === "T24C10B10A" || currentDevice.model === "T28C16R8I1" || currentDevice.model === "T64C30B30I1" || currentDevice.model === "T44C20B20") && (window as any).tempTableDataForWrite) {
         currentTempTableData = (window as any).tempTableDataForWrite;
       }
 
@@ -1501,7 +1596,8 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
         temp_settings: tempSettings
       };
 
-      if (currentDevice.model === "T24R8A" || currentDevice.model === "T28C16R8I1" || currentDevice.model === "T64C30B30I1") {
+      // T44C20B20を追加 - kotani (2026/03/24)
+      if (currentDevice.model === "T24R8A" || currentDevice.model === "T28C16R8I1" || currentDevice.model === "T64C30B30I1" || currentDevice.model === "T44C20B20") {
         // 過電流設定
         if ((window as any).currTableDataForWrite && (window as any).currTableDataForWrite.length > 0) {
           const currSettings: { [key: string]: { [channel: number]: number | string } } = {
@@ -1808,6 +1904,10 @@ export function TempDetailSettings( {selectedDeviceName, isEditable, config, onE
           } else if (deviceDetail.model === "T24R8A") {
             maxPoints = 24; // 24点まで
             span = row["sensor-No"] <= maxPoints ? 3 : 1; // maxPoints以下なら3点グループ、超えたら1点
+          // T44C20B20を追加 - kotani (2026/03/24)
+          } else if (deviceDetail.model === "T44C20B20") {
+            maxPoints = 40; // 40点まで
+            span = row["sensor-No"] <= maxPoints ? 2 : 1; // maxPoints以下なら2点グループ、超えたら1点
           }
           
           const isGroupModel = span > 1;

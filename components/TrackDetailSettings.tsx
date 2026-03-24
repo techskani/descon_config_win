@@ -68,7 +68,8 @@ export function TrackDetailSettings({selectedDeviceName, isEditable, config, onE
   // ジュール熱詳細設定からの回路名・電源種別変更イベントをリッスン
   useEffect(() => {
     const handleCircuitNameChange = (event: CustomEvent) => {
-      if (event.detail.deviceName === selectedDeviceName && (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1")) {
+      // T44C20B20を追加 - kotani (2026/03/24)
+      if (event.detail.deviceName === selectedDeviceName && (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T44C20B20")) {
         const { oldCircuitName, newCircuitName, newPower, newBreaker } = event.detail;
         
         // トラッキングテーブルの回路名、電源種別、ブレーカーを更新
@@ -88,7 +89,8 @@ export function TrackDetailSettings({selectedDeviceName, isEditable, config, onE
     };
 
     const handlePowerChange = (event: CustomEvent) => {
-      if (event.detail.deviceName === selectedDeviceName && (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1")) {
+      // T44C20B20を追加 - kotani (2026/03/24)
+      if (event.detail.deviceName === selectedDeviceName && (deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T44C20B20")) {
         const { circuitName, newPower } = event.detail;
         
         // トラッキングテーブルの電源種別を更新
@@ -220,7 +222,8 @@ export function TrackDetailSettings({selectedDeviceName, isEditable, config, onE
                   setOriginalTrackTableData(tabledetailData);
                   
                   // T28C16R8I1/T64C30B30I1用: windowオブジェクトにデータを保存
-                  if (device.model === "T28C16R8I1" || device.model === "T64C30B30I1") {
+                  // T24C10B10A, T44C20B20を追加 - kotani (2026/03/24)
+                  if (device.model === "T28C16R8I1" || device.model === "T64C30B30I1" || device.model === "T24C10B10A" || device.model === "T44C20B20") {
                     (window as any).trackTableDataForWrite = tabledetailData;
                   }
               }
@@ -231,8 +234,9 @@ export function TrackDetailSettings({selectedDeviceName, isEditable, config, onE
     }, [selectedDeviceName, config]);
     
     // trackTableDataが更新されたらwindowにも反映（T28C16R8I1/T64C30B30I1用）
+    // T24C10B10A, T44C20B20を追加 - kotani (2026/03/24)
     useEffect(() => {
-      if ((deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1") && trackTableData.length > 0) {
+      if ((deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T44C20B20") && trackTableData.length > 0) {
         (window as any).trackTableDataForWrite = trackTableData;
       }
     }, [trackTableData, deviceDetail.model]);
@@ -361,7 +365,8 @@ export function TrackDetailSettings({selectedDeviceName, isEditable, config, onE
     settrackTableData(updatedTableData);
     
     // T28C16R8I1/T64C30B30I1用: windowオブジェクトにデータを保存
-    if (deviceModel === "T28C16R8I1" || deviceModel === "T64C30B30I1") {
+    // T24C10B10A, T44C20B20を追加 - kotani (2026/03/24)
+    if (deviceModel === "T28C16R8I1" || deviceModel === "T64C30B30I1" || deviceModel === "T24C10B10A" || deviceModel === "T44C20B20") {
       (window as any).trackTableDataForWrite = updatedTableData;
     }
   };
@@ -787,8 +792,8 @@ export function TrackDetailSettings({selectedDeviceName, isEditable, config, onE
                 <select
                   value={row["circuit-name"]}
                   onChange={(e) => handleCircuitNameChange(e, row)}
-                  disabled={!isEditable || deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1"}
-                  className={`w-full text-center form-select ${isEditable && deviceDetail.model !== "T24C10B10A" && deviceDetail.model !== "T28C16R8I1" && deviceDetail.model !== "T64C30B30I1" ? 'border-2 border-blue-500 bg-blue-100' : ''}`}
+                  disabled={!isEditable || deviceDetail.model === "T24C10B10A" || deviceDetail.model === "T28C16R8I1" || deviceDetail.model === "T64C30B30I1" || deviceDetail.model === "T44C20B20"}
+                  className={`w-full text-center form-select ${isEditable && deviceDetail.model !== "T24C10B10A" && deviceDetail.model !== "T28C16R8I1" && deviceDetail.model !== "T64C30B30I1" && deviceDetail.model !== "T44C20B20" ? 'border-2 border-blue-500 bg-blue-100' : ''}`}
                 >
                     {Array.from(new Set(deviceDetail.circuits.map(circuit => circuit.name)))
                       .filter(name => name !== "未使用")
