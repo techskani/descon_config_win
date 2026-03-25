@@ -1150,8 +1150,8 @@ async def websocket_handler(websocket):
                         print(f"✅ 設定データ取得成功: {matched_device_name}")
                         print(f"📋 装置情報: name={device_settings_data.get('device_name')}, model={device_settings_data.get('model')}, ip={device_settings_data.get('ipaddr')}, port={device_settings_data.get('port')}")
                         
-                        # T24C10B10A, T28C16R8I1, T64C30B30I1モデルの場合、リモート装置から設定を読み出す
-                        if device_settings_data.get('model') in ['T24C10B10A', 'T28C16R8I1', 'T64C30B30I1']:
+                        # T24C10B10A, T28C16R8I1, T64C30B30I1, T44C20B20モデルの場合、リモート装置から設定を読み出す
+                        if device_settings_data.get('model') in ['T24C10B10A', 'T28C16R8I1', 'T64C30B30I1', 'T44C20B20']:
                             print(f"🌐 [{matched_device_name}] リモート装置から設定を読み出します（メモリ内設定は使用しない）")
                             device_for_request = devices.get(matched_device_name)
                             if device_for_request:
