@@ -109,6 +109,7 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                 let currIndex = 0;
                 let voltIndex = 0;
                 // 漏洩電流 - kotani (2026-04-02)
+                const isAirTempCircuit = circuitName === '盤内温度';
                 let leakIndex = 0;  
 
                 const datasets = Object.entries(sensorData)
@@ -116,6 +117,11 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                     if (isMainCircuit) {
                         return (sensorKey.startsWith('temp') && !sensorKey.startsWith('tempState')) ||
                                (sensorKey.startsWith('volt') && !sensorKey.startsWith('voltState'));
+                    }
+                    // 漏洩電流 - kotani (2026-04-02)
+                    if (isAirTempCircuit) {
+                        return (sensorKey.startsWith('temp') && !sensorKey.startsWith('tempState')) ||
+                               (sensorKey.startsWith('leak') && !sensorKey.startsWith('leakState'));
                     }
                     return (sensorKey.startsWith('temp') && !sensorKey.startsWith('tempState')) || 
                            (sensorKey.startsWith('curr') && !sensorKey.startsWith('currState'));
@@ -128,8 +134,8 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                         : sensorKey.startsWith('volt') && !sensorKey.startsWith('voltState')
                         ? `電圧 ${sensorKey.slice(4)}`
                         // 漏洩電流 - kotani (2026-04-02)
-                        : sensorKey.startsWith('leak') && !sensorKey.startsWith('leakState')
-                        ? `漏洩電流 ${sensorKey.slice(4)}`
+                        //: sensorKey.startsWith('leak') && !sensorKey.startsWith('leakState')
+                        //? `漏洩電流 ${sensorKey.slice(4)}`
                         : sensorKey;
 
                     let yAxisID: string;
@@ -416,13 +422,13 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                                 ))}
                             </div>
                         )}
-                        // 漏洩電流 - kotani (2026-04-02)
+                        {/* 漏洩電流 - kotani (2026-04-02) */}
                         {leakSensors.length > 0 && (
                             <div className="flex items-center gap-2 flex-wrap bg-red-50 px-3 py-2 rounded-lg">
                                 {leakSensors.map((sensor) => (
                                     <div key={`leak-${sensor.number}`} className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded shadow-md">
                                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: sensor.color }} />
-                                        <p className="text-sm whitespace-nowrap">漏洩電流{sensor.number}: <span className="text-base font-bold text-red-600">{formatValue(sensor.value)}</span> A</p>
+                                        <p className="text-sm whitespace-nowrap">漏洩電流{sensor.number}: <span className="text-base font-bold text-red-600">{formatValue(sensor.value)}</span> mA</p>
                                     </div>
                                 ))}
                             </div>
@@ -460,7 +466,7 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                                 <p className="text-xs font-medium">現在の電圧: <span className="text-xs font-bold text-green-600">{formatValue(currentVolt)}</span> V</p>
                             </div>
                         )}
-                        // 漏洩電流 - kotani (2026-04-02)
+                        {/* 漏洩電流 - kotani (2026-04-02) */}
                         {hasLeak && (
                             <div className="flex items-center gap-1 bg-gradient-to-r from-red-50 to-pink-50 px-1.5 py-0.5 rounded shadow-sm">
                                 <div className="flex gap-0.5">
@@ -468,7 +474,7 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                                         <div key={`leak-${index}`} className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
                                     ))}
                                 </div>
-                                <p className="text-xs font-medium">現在の漏洩電流: <span className="text-xs font-bold text-red-600">{formatValue(currentLeak)}</span> A</p>
+                                <p className="text-xs font-medium">現在の漏洩電流: <span className="text-xs font-bold text-red-600">{formatValue(currentLeak)}</span> mA</p>
                             </div>
                         )}
                     </>
