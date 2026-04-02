@@ -202,6 +202,28 @@ const CircuitChartListEach: React.FC<CircuitChartListEachProps> = ({configData, 
           }
         });
       }
+      // 漏洩電流データをすべて「盤内温度」回路に集約 - kotani (2026-04-02)
+      const innerCircuitName = '盤内温度';
+      //const deviceData = websocketData[deviceName];
+      const leakData = (deviceData && 'leakcurrent' in deviceData) ? (deviceData as { leakcurrent?: Record<number, [string, number][]> }).leakcurrent || {} : {};
+      const leakstateData = (deviceData && 'leakstate' in deviceData) ? (deviceData as { leakstate?: Record<number, [string, string][]> }).leakstate   || {} : {};
+
+      if (Object.keys(leakData).length > 0 || Object.keys(leakstateData).length > 0) {
+        if (!circuitData[innerCircuitName]) {
+          circuitData[innerCircuitName] = {};
+        }
+        Object.keys(leakData).forEach((sensorNumberStr) => {
+          const leaksensorNumber = parseInt(sensorNumberStr, 10);
+          const leaksensorData = leakData[leaksensorNumber] || [];
+          const leaksensorStateData = leakstateData[leaksensorNumber] || [];
+          if (leaksensorData.length > 0 || leaksensorStateData.length > 0) {
+            const key = `leak${leaksensorNumber}`;
+            const key_state = `leakState${leaksensorNumber}`;
+            circuitData[innerCircuitName][key] = leaksensorData;
+            circuitData[innerCircuitName][key_state] = leaksensorStateData;
+          }
+        });
+      }
 
       return circuitData;
     };
