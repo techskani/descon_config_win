@@ -134,8 +134,8 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                         : sensorKey.startsWith('volt') && !sensorKey.startsWith('voltState')
                         ? `電圧 ${sensorKey.slice(4)}`
                         // 漏洩電流 - kotani (2026-04-02)
-                        //: sensorKey.startsWith('leak') && !sensorKey.startsWith('leakState')
-                        //? `漏洩電流 ${sensorKey.slice(4)}`
+                        : sensorKey.startsWith('leak') && !sensorKey.startsWith('leakState')
+                        ? `漏洩電流 ${sensorKey.slice(4)}`
                         : sensorKey;
 
                     let yAxisID: string;
@@ -230,7 +230,7 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                         // 漏洩電流 - kotani (2026-04-02)
                         'y-leak': {
                             type: 'linear',
-                            display: hasLeak,
+                            display: isAirTempCircuit,
                             position: 'right',
                             title: { display: true, text: '漏洩電流 [mA]' },
                             grid: { drawOnChartArea: false },
