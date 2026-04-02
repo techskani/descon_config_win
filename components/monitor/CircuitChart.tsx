@@ -52,20 +52,18 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
     const [currentTemp, setCurrentTemp] = useState<number | null>(null);
     const [currentCurr, setCurrentCurr] = useState<number | null>(null);
     const [currentVolt, setCurrentVolt] = useState<number | null>(null);
-    // 漏洩電流 - kotani (2026-04-02)
-    const [currentLeak, setCurrentLeak] = useState<number | null>(null);
+    const [currentLeak, setCurrentLeak] = useState<number | null>(null);    // 漏洩電流 - kotani (2026-04-02)
 
     useEffect(() => { 
         const calculateValues = () => {
             let tempValues: number[] = [];
             let currValues: number[] = [];
             let voltValues: number[] = [];
+            let leakValues: number[] = [];          // 漏洩電流 - kotani (2026-04-02)
             let hasTemp = false;
             let hasCurr = false;
             let hasVolt = false;
-            // 漏洩電流 - kotani (2026-04-02)
-            let leakValues: number[] = [];
-            let hasLeak = false;
+            let hasLeak = false;                    // 漏洩電流 - kotani (2026-04-02)
 
             Object.entries(sensorData).forEach(([sensorKey, data]) => {
                 if (sensorKey.startsWith('temp') && !sensorKey.startsWith('tempState')) {
@@ -91,8 +89,7 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
             setCurrentTemp(hasTemp ? (tempValues.length > 0 ? Math.max(...tempValues) : 0) : null);
             setCurrentCurr(hasCurr ? (currValues.length > 0 ? Math.max(...currValues) : 0) : null);
             setCurrentVolt(hasVolt ? (voltValues.length > 0 ? Math.max(...voltValues) : 0) : null);
-            // 漏洩電流 - kotani (2026-04-02)
-            setCurrentLeak(hasLeak ? (leakValues.length > 0 ? Math.max(...leakValues) : 0) : null);
+            setCurrentLeak(hasLeak ? (leakValues.length > 0 ? Math.max(...leakValues) : 0) : null);     // 漏洩電流 - kotani (2026-04-02)
         };
 
         calculateValues();
@@ -105,12 +102,11 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                 }
 
                 const isMainCircuit = circuitName === '主幹';
+                const isAirTempCircuit = circuitName === '盤内温度';    // 漏洩電流 - kotani (2026-04-02)
                 let tempIndex = 0;
                 let currIndex = 0;
                 let voltIndex = 0;
-                // 漏洩電流 - kotani (2026-04-02)
-                const isAirTempCircuit = circuitName === '盤内温度';
-                let leakIndex = 0;  
+                let leakIndex = 0;                                  // 漏洩電流 - kotani (2026-04-02)
 
                 const datasets = Object.entries(sensorData)
                 .filter(([sensorKey]) => {
@@ -201,7 +197,7 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                         },
                         'y-curr': {
                             type: 'linear',
-                            display: !isMainCircuit,
+                            display: !isMainCircuit && !isAirTempCircuit,   // 漏洩電流 - kotani (2026-04-02)
                             position: 'right',
                             title: { display: true, text: '電流 [A]' },
                             grid: { drawOnChartArea: false },
@@ -236,6 +232,11 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                             grid: { drawOnChartArea: false },
                             min: 0,
                             ticks: { font: { size: 14 } },
+                            afterDataLimits: (scale) => {
+                                const { max } = scale;
+                                scale.min = 0;
+                                scale.max = max > 0 ? max * 1.2 : 250;
+                            }
                         },
                         x: {
                             type: 'time',
@@ -275,8 +276,7 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
     const hasTemp = Object.keys(sensorData).some(key => key.startsWith('temp') && !key.startsWith('tempState'));
     const hasCurr = Object.keys(sensorData).some(key => key.startsWith('curr') && !key.startsWith('currState'));
     const hasVolt = Object.keys(sensorData).some(key => key.startsWith('volt') && !key.startsWith('voltState'));
-    // 漏洩電流 - kotani (2026-04-02)
-    const hasLeak = Object.keys(sensorData).some(key => key.startsWith('leak') && !key.startsWith('leakState'));
+    const hasLeak = Object.keys(sensorData).some(key => key.startsWith('leak') && !key.startsWith('leakState'));    // 漏洩電流 - kotani (2026-04-02)
 
     const getDisplayTempColors = (): string[] => {
         const colors: string[] = [];
@@ -327,15 +327,13 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
     const displayTempColors = getDisplayTempColors();
     const displayCurrColors = getDisplayCurrColors();
     const displayVoltColors = getDisplayVoltColors();
-    // 漏洩電流 - kotani (2026-04-02)
-    const displayLeakColors = getDisplayLeakColors();
+    const displayLeakColors = getDisplayLeakColors();       // 漏洩電流 - kotani (2026-04-02)
 
     const getSensorValues = () => {
         const tempSensors: Array<{ number: string; value: number; color: string }> = [];
         const currSensors: Array<{ number: string; value: number; color: string }> = [];
         const voltSensors: Array<{ number: string; value: number; color: string }> = [];
-        // 漏洩電流 - kotani (2026-04-02)
-        const leakSensors: Array<{ number: string; value: number; color: string }> = [];
+        const leakSensors: Array<{ number: string; value: number; color: string }> = [];    // 漏洩電流 - kotani (2026-04-02)
         Object.entries(sensorData).forEach(([sensorKey, data]) => {
             if (sensorKey.startsWith('temp') && !sensorKey.startsWith('tempState')) {
                 const sensorNumber = sensorKey.slice(4);
@@ -380,8 +378,7 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                 }
             }
         });
-        // 漏洩電流 - kotani (2026-04-02)
-        return { tempSensors, currSensors, voltSensors, leakSensors };
+        return { tempSensors, currSensors, voltSensors, leakSensors };      // 漏洩電流 - kotani (2026-04-02)
     };
 
     // 漏洩電流 - kotani (2026-04-02)
