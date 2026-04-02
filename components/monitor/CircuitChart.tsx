@@ -110,14 +110,15 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
 
                 const datasets = Object.entries(sensorData)
                 .filter(([sensorKey]) => {
+                    // 主幹＋漏洩電流 - kotani (2026-04-02)
                     if (isMainCircuit) {
                         return (sensorKey.startsWith('temp') && !sensorKey.startsWith('tempState')) ||
-                               (sensorKey.startsWith('volt') && !sensorKey.startsWith('voltState'));
+                               (sensorKey.startsWith('leak') && !sensorKey.startsWith('leakState'));
                     }
-                    // 漏洩電流 - kotani (2026-04-02)
+                    // 盤内温度＋電圧 - kotani (2026-04-02)
                     if (isAirTempCircuit) {
                         return (sensorKey.startsWith('temp') && !sensorKey.startsWith('tempState')) ||
-                               (sensorKey.startsWith('leak') && !sensorKey.startsWith('leakState'));
+                               (sensorKey.startsWith('volt') && !sensorKey.startsWith('voltState'));
                     }
                     return (sensorKey.startsWith('temp') && !sensorKey.startsWith('tempState')) || 
                            (sensorKey.startsWith('curr') && !sensorKey.startsWith('currState'));
