@@ -198,7 +198,7 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                         },
                         'y-curr': {
                             type: 'linear',
-                            display: !isMainCircuit && !isAirTempCircuit,   // 漏洩電流 - kotani (2026-04-02)
+                            display: !isMainCircuit && !isAirTempCircuit,       // 主幹と盤内温度以外は温度＋電流 - kotani (2026-04-02)
                             position: 'right',
                             title: { display: true, text: '電流 [A]' },
                             grid: { drawOnChartArea: false },
@@ -212,7 +212,7 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                         },
                         'y-volt': {
                             type: 'linear',
-                            display: isMainCircuit,
+                            display: isAirTempCircuit,                          // 盤内温度は温度＋電圧 - kotani (2026-04-02)
                             position: 'right',
                             title: { display: true, text: '電圧 [V]' },
                             grid: { drawOnChartArea: false },
@@ -227,7 +227,7 @@ const CircuitChart: React.FC<CircuitChartProps> = ({ circuitName, sensorData, is
                         // 漏洩電流 - kotani (2026-04-02)
                         'y-leak': {
                             type: 'linear',
-                            display: isAirTempCircuit,
+                            display: isMainCircuit,                             // 主幹は温度＋漏洩電流 - kotani (2026-04-02)
                             position: 'right',
                             title: { display: true, text: '漏洩電流 [mA]' },
                             grid: { drawOnChartArea: false },
